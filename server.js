@@ -10,9 +10,15 @@ const driveRoutes = require("./routes/driveRoutes");
 const authRoutes = require("./routes/authRoutes");
 
 const app = express();
+// ✅ Detect runtime environment
+const isProd = process.env.NODE_ENV === "production";
+
+const SESSION_PATH = isProd
+  ? "/tmp/sessions"
+  : path.join(__dirname, "sessions");
 
 // ✅ Create runtime folders (important for Render)
-const dirs = ["sessions", "uploads", "merged"];
+const dirs = [SESSION_PATH, "uploads", "merged"];
 dirs.forEach((dir) => {
   const fullPath = path.join(__dirname, dir);
   try {
@@ -34,6 +40,16 @@ const FileStore = require("session-file-store")(session);
 // ✅ Serve static folders for uploads and merged files
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/merged", express.static(path.join(__dirname, "merged")));
+// Disable caching for all responses
+app.use((req, res, next) => {
+  res.setHeader(
+    "Cache-Control",
+    "no-store, no-cache, must-revalidate, private"
+  );
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  next();
+});
 
 app.use(
   cors({
@@ -52,33 +68,24 @@ app.options("*", cors());
 
 app.use(express.json());
 
+// ✅ Session config (auto adjusts for environment)
 app.use(
   session({
     store: new FileStore({
-      path: path.join(__dirname, "sessions"),
+      path: SESSION_PATH,
       retries: 1
     }),
     secret: process.env.SESSION_SECRET || "supersecret",
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: true, // Render uses HTTPS
+      secure: isProd, // Only HTTPS in production
       httpOnly: true,
-      sameSite: "none", // allows Vercel cross-site cookies
+      sameSite: isProd ? "none" : "lax", // Cross-origin allowed only in prod
       maxAge: 24 * 60 * 60 * 1000 // 1 day
     }
   })
 );
-// Disable caching for all responses
-app.use((req, res, next) => {
-  res.setHeader(
-    "Cache-Control",
-    "no-store, no-cache, must-revalidate, private"
-  );
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
-  next();
-});
 
 // ✅ Routes
 app.use("/auth", authRoutes);
