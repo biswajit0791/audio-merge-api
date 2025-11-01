@@ -56,9 +56,7 @@ app.use(
   session({
     store: new FileStore({
       path: path.join(__dirname, "sessions"),
-      retries: 0, // don’t keep retrying forever
-      ttl: 86400, // 1 day
-      logFn: function () {} // silence noisy logs
+      retries: 1
     }),
     secret: process.env.SESSION_SECRET || "supersecret",
     resave: false,
