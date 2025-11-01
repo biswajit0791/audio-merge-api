@@ -3,12 +3,28 @@ const express = require("express");
 const cors = require("cors");
 const session = require("express-session");
 const FileStore = require("session-file-store")(session);
+const fs = require("fs");
+const path = require("path");
 
 const audioRoutes = require("./routes/audioRoutes");
 const driveRoutes = require("./routes/driveRoutes");
 const authRoutes = require("./routes/authRoutes");
 
 const app = express();
+
+// ✅ Create runtime folders (important for Render)
+const dirs = ["sessions", "uploads", "merged"];
+dirs.forEach((dir) => {
+  const fullPath = path.join(__dirname, dir);
+  if (!fs.existsSync(fullPath)) {
+    fs.mkdirSync(fullPath, { recursive: true });
+    console.log(`📁 Created ${dir} folder at ${fullPath}`);
+  }
+});
+
+// ✅ Serve static folders for uploads and merged files
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/merged", express.static(path.join(__dirname, "merged")));
 
 const allowedOrigins = [
   "http://localhost:5173",
@@ -19,7 +35,7 @@ app.use(
   cors({
     origin: [
       "https://audio-merge-studio.vercel.app", // your Vercel frontend
-      "http://localhost:5173"                  // for local dev
+      "http://localhost:5173" // for local dev
     ],
     credentials: true, // ✅ Allow cookies / sessions
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -34,22 +50,21 @@ app.use(express.json());
 
 app.use(
   session({
-    store: new FileStore({ path: "./sessions" }),
-    secret: process.env.SESSION_SECRET || "supersecret123",
+    store: new FileStore({
+      path: path.join(__dirname, "sessions"),
+      retries: 2
+    }),
+    secret: process.env.SESSION_SECRET || "supersecret",
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: true,            // Required for HTTPS
+      secure: true, // Render uses HTTPS
       httpOnly: true,
-      sameSite: "none",        // <-- VERY IMPORTANT for cross-origin cookies
-      maxAge: 1000 * 60 * 60 * 24 // 1 day
+      sameSite: "none", // allows Vercel cross-site cookies
+      maxAge: 24 * 60 * 60 * 1000 // 1 day
     }
   })
 );
-
-// ✅ Static folders
-app.use("/uploads", express.static("uploads"));
-app.use("/merged", express.static("merged"));
 
 // ✅ Routes
 app.use("/auth", authRoutes);
