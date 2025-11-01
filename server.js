@@ -37,7 +37,12 @@ app.use(
     secret: process.env.SESSION_SECRET || "supersecret123",
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false, sameSite: "lax" }
+    cookie: {
+      secure: true,            // Required for HTTPS
+      httpOnly: true,
+      sameSite: "none",        // <-- VERY IMPORTANT for cross-origin cookies
+      maxAge: 1000 * 60 * 60 * 24 // 1 day
+    }
   })
 );
 
