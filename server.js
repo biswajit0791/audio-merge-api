@@ -2,7 +2,6 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const session = require("express-session");
-const FileStore = require("session-file-store")(session);
 const fs = require("fs");
 const path = require("path");
 
@@ -29,15 +28,12 @@ dirs.forEach((dir) => {
     console.error(`❌ Failed to prepare ${dir} folder:`, err);
   }
 });
+// only require after dirs are guaranteed
+const FileStore = require("session-file-store")(session);
 
 // ✅ Serve static folders for uploads and merged files
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/merged", express.static(path.join(__dirname, "merged")));
-
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://audio-merge-studio.vercel.app"
-];
 
 app.use(
   cors({
@@ -60,7 +56,9 @@ app.use(
   session({
     store: new FileStore({
       path: path.join(__dirname, "sessions"),
-      retries: 2
+      retries: 0, // don’t keep retrying forever
+      ttl: 86400, // 1 day
+      logFn: function () {} // silence noisy logs
     }),
     secret: process.env.SESSION_SECRET || "supersecret",
     resave: false,
