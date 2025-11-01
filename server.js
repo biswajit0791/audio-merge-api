@@ -16,9 +16,17 @@ const app = express();
 const dirs = ["sessions", "uploads", "merged"];
 dirs.forEach((dir) => {
   const fullPath = path.join(__dirname, dir);
-  if (!fs.existsSync(fullPath)) {
-    fs.mkdirSync(fullPath, { recursive: true });
-    console.log(`📁 Created ${dir} folder at ${fullPath}`);
+  try {
+    if (!fs.existsSync(fullPath)) {
+      fs.mkdirSync(fullPath, { recursive: true });
+      console.log(`📁 Created ${dir} folder`);
+    }
+
+    // ✅ Give read-write-execute permissions (owner, group, others)
+    fs.chmodSync(fullPath, 0o777);
+    console.log(`🔓 Permissions set for ${dir} folder`);
+  } catch (err) {
+    console.error(`❌ Failed to prepare ${dir} folder:`, err);
   }
 });
 
