@@ -29,7 +29,18 @@ exports.handleCallback = async (req, res) => {
 };
 
 exports.checkAuthStatus = (req, res) => {
-  res.json({ authenticated: !!req.session.tokens });
+  try {
+    if (req.session && req.session.tokens) {
+      return res.status(200).json({ status: true });
+    } else {
+      return res.status(200).json({ status: false });
+    }
+  } catch (err) {
+    console.error("Auth status check failed:", err);
+    return res
+      .status(500)
+      .json({ status: false, error: "Internal Server Error" });
+  }
 };
 
 exports.debugSession = (req, res) => {
