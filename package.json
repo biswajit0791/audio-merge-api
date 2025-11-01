@@ -4,6 +4,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "build": "./render-build.sh",
     "dev": "nodemon server.js"
   },
   "dependencies": {
