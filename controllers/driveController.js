@@ -75,7 +75,10 @@ exports.streamDriveFile = async (req, res) => {
       fields: "id,name,mimeType,size"
     });
 
-    res.setHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+    res.setHeader(
+      "Access-Control-Allow-Origin",
+      `${process.env.FRONTEND_ORIGIN}`
+    );
     res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader("Content-Type", meta.data.mimeType || "audio/mpeg");
     res.setHeader("Content-Length", meta.data.size);

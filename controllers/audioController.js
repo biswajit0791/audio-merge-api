@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const ffmpeg = require("fluent-ffmpeg");
+require("dotenv").config();
 
 const UPLOADS_DIR = path.join(__dirname, "../uploads");
 const MERGED_DIR = path.join(__dirname, "../merged");
@@ -24,7 +25,10 @@ exports.getMetadata = (req, res) => {
     return res.status(404).json({ error: "File not found" });
 
   // ✅ Explicitly set CORS-safe headers for this route
-  res.setHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+  res.setHeader(
+    "Access-Control-Allow-Origin",
+    `${process.env.FRONTEND_ORIGIN}`
+  );
   res.setHeader("Access-Control-Allow-Credentials", "true");
 
   ffmpeg.ffprobe(filePath, (err, metadata) => {

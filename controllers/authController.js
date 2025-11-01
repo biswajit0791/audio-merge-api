@@ -25,7 +25,7 @@ exports.handleCallback = async (req, res) => {
   await new Promise((resolve) => req.session.save(resolve));
 
   console.log("✅ Google tokens stored in session");
-  res.redirect("http://localhost:5173");
+  res.redirect(`${process.env.FRONTEND_ORIGIN}`);
 };
 
 exports.checkAuthStatus = (req, res) => {
