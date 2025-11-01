@@ -15,17 +15,23 @@ exports.getAuthUrl = (req, res) => {
 };
 
 exports.handleCallback = async (req, res) => {
-  const code = req.query.code;
-  if (!code) return res.status(400).send("Missing code");
+  try {
+    const { tokens } = await oauth2Client.getToken(req.query.code);
+    oauth2Client.setCredentials(tokens);
 
-  const oauth2Client = createOAuthClient();
-  const { tokens } = await oauth2Client.getToken(code);
+    req.session.tokens = tokens;
+    await new Promise((resolve, reject) =>
+      req.session.save((err) => (err ? reject(err) : resolve()))
+    );
+    console.log("✅ Google tokens stored in session");
 
-  req.session.tokens = tokens;
-  await new Promise((resolve) => req.session.save(resolve));
-
-  console.log("✅ Google tokens stored in session");
-  res.redirect(`${process.env.FRONTEND_ORIGIN}`);
+    res.redirect(
+      process.env.FRONTEND_URL || "https://audio-merge-studio.vercel.app"
+    );
+  } catch (err) {
+    console.error("❌ Error during callback:", err);
+    res.redirect(`${process.env.FRONTEND_URL}?error=auth_failed`);
+  }
 };
 
 exports.checkAuthStatus = (req, res) => {
@@ -45,7 +51,8 @@ exports.checkAuthStatus = (req, res) => {
 
 exports.debugSession = (req, res) => {
   res.json({
-    hasTokens: !!req.session.tokens,
-    session: req.session
+    hasSession: !!req.session,
+    hasTokens: !!req.session?.tokens,
+    sessionData: req.session
   });
 };
