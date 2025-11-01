@@ -31,19 +31,10 @@ app.use(
 app.options("*", cors());
 
 app.use(express.json());
-const __dirname = path.resolve();
-const sessionDir = path.join(__dirname, "sessions");
-if (!fs.existsSync(sessionDir)) {
-  fs.mkdirSync(sessionDir, { recursive: true });
-  console.log("✅ Created sessions directory:", sessionDir);
-}
-const SessionFileStore = FileStore(session);
+
 app.use(
   session({
-    store: new SessionFileStore({
-      path: sessionDir,
-      retries: 2
-    }),
+    store: new FileStore({ path: "./sessions" }),
     secret: process.env.SESSION_SECRET || "supersecret123",
     resave: false,
     saveUninitialized: false,
