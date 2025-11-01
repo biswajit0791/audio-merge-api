@@ -17,10 +17,10 @@ const allowedOrigins = [
 
 app.use(
   cors({
-    origin: (origin, cb) => {
-      if (!origin || allowedOrigins.includes(origin)) cb(null, true);
-      else cb(new Error("CORS not allowed"));
-    }, // ✅ Vite default dev port
+    origin: [
+      "https://audio-merge-studio.vercel.app", // your Vercel frontend
+      "http://localhost:5173"                  // for local dev
+    ],
     credentials: true, // ✅ Allow cookies / sessions
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "Accept"]
