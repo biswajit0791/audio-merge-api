@@ -110,6 +110,11 @@ dist
 # Serverless directories
 .serverless/
 
+# Upload and merged folders
+uploads/
+merged/
+sessions/
+
 # FuseBox cache
 .fusebox/
 
@@ -125,6 +130,8 @@ dist
 # Stores VSCode versions used for testing VSCode extensions
 .vscode-test
 
+.env
+
 # yarn v3
 .pnp.*
 .yarn/*
@@ -137,3 +144,4 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+.DS_Store
