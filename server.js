@@ -48,16 +48,25 @@ app.use((req, res, next) => {
 
 // ======== CORS (PROXY-FRIENDLY) ========
 // ✅ Only allow localhost for dev — production handled by proxy
-const allowedOrigins = ["http://localhost:5173"];
+const allowedOrigins = [
+  "http://localhost:5173", // local dev (Vite)
+  "https://audio-merge-studio.vercel.app" // production frontend
+];
 
+// ✅ Flexible CORS config (proxy & direct safe)
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
+      // Allow same-origin, server-to-server, or Postman (no origin)
+      if (!origin) return callback(null, true);
+
+      // Allow if in whitelist (exact match)
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
       }
+
+      console.error("❌ CORS blocked:", origin);
+      return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
