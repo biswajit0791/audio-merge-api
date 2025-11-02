@@ -9,6 +9,7 @@ const FileStore = require("session-file-store")(session);
 const audioRoutes = require("./routes/audioRoutes");
 const driveRoutes = require("./routes/driveRoutes");
 const authRoutes = require("./routes/authRoutes");
+const sseRoutes = require("./routes/sseRoutes");
 
 const app = express();
 const isProd = process.env.NODE_ENV === "production";
@@ -76,8 +77,9 @@ app.use(
 app.options("*", cors()); // handle preflight
 
 // Increase upload limits
-app.use(express.json({ limit: "300mb" }));
-app.use(express.urlencoded({ limit: "300mb", extended: true }));
+// larger payloads
+app.use(express.json({ limit: "1gb" }));
+app.use(express.urlencoded({ limit: "1gb", extended: true }));
 
 // ======== TRUST PROXY (REQUIRED for secure cookies on Render) ========
 app.set("trust proxy", 1);
@@ -102,9 +104,10 @@ app.use(
 );
 
 // ======== ROUTES ========
-app.use("/auth", authRoutes);
 app.use("/api", audioRoutes);
 app.use("/api", driveRoutes);
+app.use("/api", sseRoutes);
+app.use("/auth", authRoutes);
 
 // ======== HEALTH CHECK ========
 app.get("/health", (_, res) => res.send("OK"));

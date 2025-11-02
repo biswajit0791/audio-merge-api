@@ -1,41 +1,36 @@
+// routes/audioRoutes.js
 const express = require("express");
-const router = express.Router();
-const {
-  uploadAudio,
-  getMetadata,
-  mergeAudio,
-  deleteFile,
-  getUploadsList
-} = require("../controllers/audioController");
-
 const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
+const audioController = require("../controllers/audioController");
 
-// Ensure upload dirs exist
-const UPLOADS_DIR = path.join(__dirname, "../uploads");
-const MERGED_DIR = path.join(__dirname, "../merged");
-if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR);
-if (!fs.existsSync(MERGED_DIR)) fs.mkdirSync(MERGED_DIR);
+const router = express.Router();
 
+const UPLOADS_DIR = path.join(__dirname, "..", "uploads");
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOADS_DIR),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(
-      null,
-      `${Date.now()}_${file.originalname.replace(/[^a-zA-Z0-9.\-]/g, "_")}`
-    );
-  }
+  filename: (req, file, cb) =>
+    cb(null, `${Date.now()}_${file.originalname.replace(/\s+/g, "_")}`)
 });
 
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 1024 * 1024 * 1024 * 2 } // 2GB limit per file
+});
 
-// ROUTES
-router.post("/upload", upload.single("audio"), uploadAudio);
-router.get("/metadata/:filename", getMetadata);
-router.post("/merge", mergeAudio);
-router.delete("/delete/:type/:filename", deleteFile);
-router.get("/uploads", getUploadsList);
+// Upload audio file
+router.post("/upload", upload.single("audio"), audioController.uploadAudio);
+
+// Get metadata
+router.get("/metadata/:filename", audioController.getMetadata);
+
+// Start merge job
+router.post("/merge", audioController.mergeAudio);
+
+// Delete file
+router.delete("/delete/:type/:filename", audioController.deleteFile);
+
+// List uploaded files
+router.get("/uploads", audioController.getUploads);
 
 module.exports = router;
