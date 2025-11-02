@@ -4,43 +4,38 @@ const cors = require("cors");
 const session = require("express-session");
 const fs = require("fs");
 const path = require("path");
+const FileStore = require("session-file-store")(session);
 
 const audioRoutes = require("./routes/audioRoutes");
 const driveRoutes = require("./routes/driveRoutes");
 const authRoutes = require("./routes/authRoutes");
 
 const app = express();
-// ✅ Detect runtime environment
 const isProd = process.env.NODE_ENV === "production";
 
+// ======== FOLDER SETUP (Render-safe) ========
 const SESSION_PATH = isProd
   ? "/tmp/sessions"
   : path.join(__dirname, "sessions");
 
-// ✅ Create runtime folders (important for Render)
-const dirs = [SESSION_PATH, "uploads", "merged"];
-dirs.forEach((dir) => {
-  const fullPath = path.join(__dirname, dir);
+["uploads", "merged", SESSION_PATH].forEach((dir) => {
+  const fullPath = path.resolve(__dirname, dir);
   try {
     if (!fs.existsSync(fullPath)) {
       fs.mkdirSync(fullPath, { recursive: true });
-      console.log(`📁 Created ${dir} folder`);
+      console.log(`📁 Created: ${dir}`);
     }
-
-    // ✅ Give read-write-execute permissions (owner, group, others)
     fs.chmodSync(fullPath, 0o777);
-    console.log(`🔓 Permissions set for ${dir} folder`);
   } catch (err) {
-    console.error(`❌ Failed to prepare ${dir} folder:`, err);
+    console.error(`❌ Folder setup failed for ${dir}:`, err);
   }
 });
-// only require after dirs are guaranteed
-const FileStore = require("session-file-store")(session);
 
-// ✅ Serve static folders for uploads and merged files
+// ======== STATIC FOLDERS ========
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/merged", express.static(path.join(__dirname, "merged")));
-// Disable caching for all responses
+
+// ======== DISABLE CACHING ========
 app.use((req, res, next) => {
   res.setHeader(
     "Cache-Control",
@@ -50,32 +45,34 @@ app.use((req, res, next) => {
   res.setHeader("Expires", "0");
   next();
 });
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://audio-merge-studio.vercel.app"
-];
+
+// ======== CORS (PROXY-FRIENDLY) ========
+// ✅ Only allow localhost for dev — production handled by proxy
+const allowedOrigins = ["http://localhost:5173"];
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow local dev or non-browser requests (like Postman)
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error("Not allowed by CORS"));
       }
     },
-    credentials: true, // ✅ Allow cookies / sessions
+    credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "Accept"]
   })
 );
-
-// ✅ Handle OPTIONS preflight for all routes
-app.options("*", cors());
+app.options("*", cors()); // handle preflight
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// ✅ Session config (auto adjusts for environment)
+// ======== TRUST PROXY (REQUIRED for secure cookies on Render) ========
+app.set("trust proxy", 1);
+
+// ======== SESSION CONFIG ========
 app.use(
   session({
     store: new FileStore({
@@ -86,20 +83,23 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: isProd, // Only HTTPS in production
+      secure: isProd, // HTTPS only in prod
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: isProd ? "none" : "lax", // "none" needed for Render + Vercel
       maxAge: 24 * 60 * 60 * 1000 // 1 day
     }
   })
 );
 
-// ✅ Routes
+// ======== ROUTES ========
 app.use("/auth", authRoutes);
 app.use("/api", audioRoutes);
 app.use("/api", driveRoutes);
 
-// ✅ Start server
+// ======== HEALTH CHECK ========
+app.get("/health", (_, res) => res.send("OK"));
+
+// ======== START SERVER ========
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, "0.0.0.0", () =>
   console.log(`🚀 Server running at http://localhost:${PORT}`)
