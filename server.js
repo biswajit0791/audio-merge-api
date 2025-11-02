@@ -53,10 +53,14 @@ app.use((req, res, next) => {
 
 app.use(
   cors({
-    origin: [
-      "https://audio-merge-studio.vercel.app", // your Vercel frontend
-      "http://localhost:5173" // for local dev
-    ],
+    origin: (origin, callback) => {
+      // Allow local dev or non-browser requests (like Postman)
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true, // ✅ Allow cookies / sessions
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "Accept"]
