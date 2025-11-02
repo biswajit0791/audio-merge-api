@@ -75,8 +75,9 @@ app.use(
 );
 app.options("*", cors()); // handle preflight
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Increase upload limits
+app.use(express.json({ limit: "300mb" }));
+app.use(express.urlencoded({ limit: "300mb", extended: true }));
 
 // ======== TRUST PROXY (REQUIRED for secure cookies on Render) ========
 app.set("trust proxy", 1);
