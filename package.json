@@ -8,14 +8,17 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
+    "bullmq": "^5.63.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^4.18.2",
     "express-session": "^1.17.3",
     "fluent-ffmpeg": "^2.1.2",
     "googleapis": "^131.0.0",
+    "ioredis": "^5.8.2",
     "multer": "^1.4.5-lts.1",
     "nodemon": "^3.1.10",
-    "session-file-store": "^1.5.0"
+    "session-file-store": "^1.5.0",
+    "uuid": "^13.0.0"
   }
 }

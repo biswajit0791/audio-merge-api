@@ -5,7 +5,8 @@ const {
   getMetadata,
   mergeAudio,
   deleteFile,
-  getUploadsList
+  getUploadsList,
+  mergeAudioStatus
 } = require("../controllers/audioController");
 
 const multer = require("multer");
@@ -35,6 +36,7 @@ const upload = multer({ storage });
 router.post("/upload", upload.single("audio"), uploadAudio);
 router.get("/metadata/:filename", getMetadata);
 router.post("/merge", mergeAudio);
+router.get("/merge/status/:id", mergeAudioStatus);
 router.delete("/delete/:type/:filename", deleteFile);
 router.get("/uploads", getUploadsList);
 

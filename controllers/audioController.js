@@ -2,75 +2,123 @@ const fs = require("fs");
 const path = require("path");
 const ffmpeg = require("fluent-ffmpeg");
 require("dotenv").config();
+const { v4: uuidv4 } = require("uuid");
+const { mergeQueue, enqueueMergeJob } = require("../worker/mergeWorker");
 
 const UPLOADS_DIR = path.join(__dirname, "../uploads");
 const MERGED_DIR = path.join(__dirname, "../merged");
 
 // ✅ Upload
-exports.uploadAudio = (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-  res.json({
-    filename: req.file.filename,
-    originalname: req.file.originalname,
-    size: req.file.size
-  });
+exports.uploadAudio = async (req, res) => {
+  try {
+    const filePath = path.join(UPLOADS_DIR, req.file.filename);
+
+    // 🕒 Ensure file is completely written before probing
+    await new Promise((resolve, reject) => {
+      const checkFile = (attempts = 5) => {
+        fs.access(filePath, fs.constants.F_OK, (err) => {
+          if (!err) return resolve();
+          if (attempts <= 0) return reject(new Error("File not ready"));
+          setTimeout(() => checkFile(attempts - 1), 300);
+        });
+      };
+      checkFile();
+    });
+
+    // 🧠 Extract metadata (duration, size, etc.)
+    ffmpeg.ffprobe(filePath, (err, metadata) => {
+      if (err) {
+        console.error("❌ FFprobe failed:", err.message);
+        return res.status(500).json({ error: "Failed to analyze audio file" });
+      }
+
+      const { duration, size } = metadata.format;
+      res.json({
+        success: true,
+        originalname: req.file.originalname,
+        filename: req.file.filename,
+        size,
+        duration
+      });
+    });
+  } catch (err) {
+    console.error("❌ Upload failed:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 };
 
 // ✅ Get metadata using ffprobe
-exports.getMetadata = (req, res) => {
-  const filename = req.params.filename;
-  const filePath = path.join(UPLOADS_DIR, filename);
+exports.getMetadata = async (req, res) => {
+  const filePath = path.join(__dirname, "uploads", req.params.filename);
 
-  if (!fs.existsSync(filePath))
-    return res.status(404).json({ error: "File not found" });
-
-  // ✅ Explicitly set CORS-safe headers for this route
-  res.setHeader(
-    "Access-Control-Allow-Origin",
-    `${process.env.FRONTEND_ORIGIN}`
-  );
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-
-  ffmpeg.ffprobe(filePath, (err, metadata) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.json({
-      duration: metadata.format.duration,
-      size: metadata.format.size,
-      format: metadata.format.format_name
+  const waitForFile = (file, retries = 5, delay = 300) =>
+    new Promise((resolve, reject) => {
+      const check = () => {
+        fs.access(file, fs.constants.F_OK, (err) => {
+          if (!err) return resolve(true);
+          if (retries <= 0) return reject(new Error("File not found"));
+          setTimeout(() => check(--retries), delay);
+        });
+      };
+      check();
     });
-  });
+
+  try {
+    // ✅ Wait for file to be fully written
+    await waitForFile(filePath);
+
+    ffmpeg.ffprobe(filePath, (err, metadata) => {
+      if (err) {
+        console.error("❌ Metadata read failed:", err.message);
+        return res.status(500).json({ error: "Failed to read metadata" });
+      }
+
+      const { duration, size } = metadata.format;
+      res.json({ duration, size });
+    });
+  } catch (err) {
+    console.error("❌ Metadata route error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 };
 
 // ✅ Merge multiple audios
 exports.mergeAudio = async (req, res) => {
-  const files = req.body.files;
-  if (!files?.length)
+  const { files, name } = req.body;
+
+  if (!files || !Array.isArray(files) || files.length === 0)
     return res.status(400).json({ error: "No files provided" });
 
-  const mergedName = `${req.body.name || "merged"}_${Date.now()}.mp3`;
-  const mergedPath = path.join(MERGED_DIR, mergedName);
-  const listFilePath = path.join(MERGED_DIR, `inputs_${Date.now()}.txt`);
-
   try {
-    const listContent = files
-      .map((f) => `file '${path.join(UPLOADS_DIR, f).replace(/\\/g, "/")}'`)
-      .join("\n");
+    const jobId = await enqueueMergeJob(files, name);
+    res.json({ jobId, message: "Merge queued successfully" });
+  } catch (err) {
+    console.error("❌ Failed to queue job:", err.message);
+    res
+      .status(500)
+      .json({ error: "Failed to queue job", details: err.message });
+  }
+};
 
-    fs.writeFileSync(listFilePath, listContent);
+exports.mergeAudioStatus = async (req, res) => {
+  try {
+    const job = await mergeQueue.getJob(req.params.id);
+    if (!job) return res.status(404).json({ error: "Job not found" });
 
-    const { exec } = require("child_process");
-    const cmd = `ffmpeg -y -f concat -safe 0 -i "${listFilePath}" -acodec libmp3lame -q:a 2 "${mergedPath}"`;
+    const state = await job.getState();
+    const progress = job.progress;
+    const result = job.returnvalue;
 
-    exec(cmd, { maxBuffer: 1024 * 1024 * 10 }, (err, stdout, stderr) => {
-      fs.unlinkSync(listFilePath);
-      if (err) return res.status(500).json({ error: stderr });
-      console.log("✅ Merged successfully:", mergedPath);
-      res.json({ mergedFile: mergedName });
+    res.json({
+      id: job.id,
+      state,
+      progress,
+      data: job.data,
+      result
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("❌ Status check failed:", err);
+    res.status(500).json({ error: "Status check failed" });
   }
 };
 
