@@ -88,7 +88,7 @@ app.use(
     cookie: {
       secure: isProd, // Only HTTPS in production
       httpOnly: true,
-      sameSite: isProd ? "none" : "lax", // Cross-origin allowed only in prod
+      sameSite: "lax",
       maxAge: 24 * 60 * 60 * 1000 // 1 day
     }
   })
