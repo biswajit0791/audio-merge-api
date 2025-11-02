@@ -50,7 +50,10 @@ app.use((req, res, next) => {
   res.setHeader("Expires", "0");
   next();
 });
-
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://audio-merge-studio.vercel.app"
+];
 app.use(
   cors({
     origin: (origin, callback) => {
