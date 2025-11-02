@@ -14,8 +14,9 @@ const connection = new IORedis(
   }
 );
 
-// 🧩 Queue (no QueueScheduler needed)
+// 🧩 Queues
 const mergeQueue = new Queue("merge-audio", { connection });
+const metaQueue = new Queue("audio-metadata", { connection });
 
 // 📁 Folder setup
 const workerDir = __dirname;
@@ -28,27 +29,26 @@ const mergedDir = path.join(__dirname, "../merged");
   }
 });
 
-// 🎧 Worker logic
-const worker = new Worker(
+// 🎧 ========== MERGE WORKER ==========
+const mergeWorker = new Worker(
   "merge-audio",
   async (job) => {
     const { files, name } = job.data;
     const jobId = job.id || uuidv4();
     console.log(`🎬 Starting merge for job ${jobId}: ${name}`);
 
-    // 📝 FFmpeg concat list file
     const listFile = path.join(workerDir, "merge_list.txt");
     const content = files
       .map((f) => `file '${path.join(uploadDir, f)}'`)
       .join("\n");
     fs.writeFileSync(listFile, content);
 
-    // 🧩 Safe filename
     const safeBaseName = name
       .replace(/\s+/g, "_")
       .replace(/[^\w\-_.]/g, "")
       .replace(/_+/g, "_")
       .trim();
+
     const outputName = `${safeBaseName || "merged"}_${Date.now()}.mp3`;
     const outputPath = path.join(mergedDir, outputName);
 
@@ -56,7 +56,6 @@ const worker = new Worker(
 
     const cmd = `ffmpeg -y -f concat -safe 0 -i "${listFile}" -c copy "${outputPath}"`;
 
-    // 🕒 Run FFmpeg
     return new Promise((resolve, reject) => {
       const process = exec(cmd, (error, stdout, stderr) => {
         if (error) {
@@ -70,7 +69,7 @@ const worker = new Worker(
         resolve({ output: outputPath, name: outputName });
       });
 
-      // ⏱️ Simulate progress updates
+      // Simulate progress
       let progress = 0;
       const interval = setInterval(() => {
         progress += 20;
@@ -87,13 +86,68 @@ const worker = new Worker(
   }
 );
 
+// 🎵 ========== METADATA WORKER ==========
+const metaWorker = new Worker(
+  "audio-metadata",
+  async (job) => {
+    const { filePath, filename, originalname, size } = job.data;
+    console.log(`📊 Extracting metadata for ${filename}`);
+
+    return new Promise((resolve, reject) => {
+      exec(
+        `ffprobe -v quiet -show_entries format=duration,size -of json "${filePath}"`,
+        (err, stdout) => {
+          if (err) {
+            console.error(`❌ Metadata extraction failed: ${err.message}`);
+            return reject(err);
+          }
+
+          const info = JSON.parse(stdout).format;
+          const duration = parseFloat(info.duration) || 0;
+          const fileSize = parseInt(info.size) || size;
+
+          const metaPath = path.join(uploadDir, `${filename}.json`);
+          fs.writeFileSync(
+            metaPath,
+            JSON.stringify({
+              filename,
+              originalname,
+              size: fileSize,
+              duration
+            })
+          );
+
+          console.log(
+            `✅ Metadata saved: ${filename} (${duration.toFixed(2)}s)`
+          );
+          resolve({ filename, duration, size: fileSize });
+        }
+      );
+    });
+  },
+  {
+    connection,
+    concurrency: 3,
+    removeOnComplete: { age: 3600 },
+    removeOnFail: { age: 7200 }
+  }
+);
+
 // 🧾 Worker events
-worker.on("completed", (job, result) => {
-  console.log(`✅ [Worker] Job ${job.id} completed: ${result.name}`);
+mergeWorker.on("completed", (job, result) => {
+  console.log(`✅ [Worker] Merge job ${job.id} completed: ${result.name}`);
 });
 
-worker.on("failed", (job, err) => {
-  console.error(`💥 [Worker] Job ${job.id} failed: ${err.message}`);
+mergeWorker.on("failed", (job, err) => {
+  console.error(`💥 [Worker] Merge job ${job.id} failed: ${err.message}`);
+});
+
+metaWorker.on("completed", (job, result) => {
+  console.log(`✅ [Worker] Metadata job completed: ${result.filename}`);
+});
+
+metaWorker.on("failed", (job, err) => {
+  console.error(`💥 [Worker] Metadata job failed: ${err.message}`);
 });
 
 // 🔁 Enqueue merge job
@@ -108,8 +162,6 @@ const enqueueMergeJob = async (files, name) => {
 };
 
 connection.on("connect", () => console.log("✅ Redis connected (BullMQ)"));
-connection.on("error", (err) =>
-  console.error("❌ Redis connection error:", err)
-);
+connection.on("error", (err) => console.error("❌ Redis error:", err.message));
 
-module.exports = { mergeQueue, enqueueMergeJob };
+module.exports = { mergeQueue, enqueueMergeJob, metaQueue };

@@ -3,7 +3,11 @@ const path = require("path");
 const ffmpeg = require("fluent-ffmpeg");
 require("dotenv").config();
 const { v4: uuidv4 } = require("uuid");
-const { mergeQueue, enqueueMergeJob } = require("../worker/mergeWorker");
+const {
+  mergeQueue,
+  enqueueMergeJob,
+  metaQueue
+} = require("../worker/mergeWorker");
 
 const UPLOADS_DIR = path.join(__dirname, "../uploads");
 const MERGED_DIR = path.join(__dirname, "../merged");
@@ -12,34 +16,19 @@ const MERGED_DIR = path.join(__dirname, "../merged");
 exports.uploadAudio = async (req, res) => {
   try {
     const filePath = path.join(UPLOADS_DIR, req.file.filename);
+    const { filename, originalname, size } = req.file;
 
-    // 🕒 Ensure file is completely written before probing
-    await new Promise((resolve, reject) => {
-      const checkFile = (attempts = 5) => {
-        fs.access(filePath, fs.constants.F_OK, (err) => {
-          if (!err) return resolve();
-          if (attempts <= 0) return reject(new Error("File not ready"));
-          setTimeout(() => checkFile(attempts - 1), 300);
-        });
-      };
-      checkFile();
-    });
+    // 🟢 Enqueue metadata extraction job
+    await metaQueue.add("extract", { filePath, filename, originalname, size });
 
-    // 🧠 Extract metadata (duration, size, etc.)
-    ffmpeg.ffprobe(filePath, (err, metadata) => {
-      if (err) {
-        console.error("❌ FFprobe failed:", err.message);
-        return res.status(500).json({ error: "Failed to analyze audio file" });
-      }
-
-      const { duration, size } = metadata.format;
-      res.json({
-        success: true,
-        originalname: req.file.originalname,
-        filename: req.file.filename,
-        size,
-        duration
-      });
+    // Respond immediately (non-blocking)
+    res.json({
+      success: true,
+      originalname,
+      filename,
+      size,
+      duration: null,
+      message: "File uploaded. Metadata will be extracted shortly."
     });
   } catch (err) {
     console.error("❌ Upload failed:", err.message);
@@ -49,35 +38,18 @@ exports.uploadAudio = async (req, res) => {
 
 // ✅ Get metadata using ffprobe
 exports.getMetadata = async (req, res) => {
-  const filePath = path.join(__dirname, "uploads", req.params.filename);
-
-  const waitForFile = (file, retries = 5, delay = 300) =>
-    new Promise((resolve, reject) => {
-      const check = () => {
-        fs.access(file, fs.constants.F_OK, (err) => {
-          if (!err) return resolve(true);
-          if (retries <= 0) return reject(new Error("File not found"));
-          setTimeout(() => check(--retries), delay);
-        });
-      };
-      check();
-    });
-
   try {
-    // ✅ Wait for file to be fully written
-    await waitForFile(filePath);
+    const { filename } = req.params;
+    const metaPath = path.join(UPLOADS_DIR, `${filename}.json`);
 
-    ffmpeg.ffprobe(filePath, (err, metadata) => {
-      if (err) {
-        console.error("❌ Metadata read failed:", err.message);
-        return res.status(500).json({ error: "Failed to read metadata" });
-      }
+    if (!fs.existsSync(metaPath)) {
+      return res.status(202).json({ status: "processing" });
+    }
 
-      const { duration, size } = metadata.format;
-      res.json({ duration, size });
-    });
+    const data = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+    res.json({ status: "done", ...data });
   } catch (err) {
-    console.error("❌ Metadata route error:", err.message);
+    console.error("❌ Metadata fetch failed:", err.message);
     res.status(500).json({ error: err.message });
   }
 };
