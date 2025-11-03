@@ -59,7 +59,7 @@ exports.getMergedFromDrive = async (req, res) => {
   }
 };
 
-// ✅ Try Drive first → fallback to backend/merged
+// ✅ Stream Drive File or fallback to local file
 exports.streamDriveFile = async (req, res) => {
   const { id } = req.params;
   const oauth2Client = createOAuthClient();
@@ -100,4 +100,40 @@ exports.streamDriveFile = async (req, res) => {
     }
     res.status(404).json({ error: "File not found" });
   }
+};
+
+// ✅ NEW: Delete File from Drive
+exports.deleteDriveFile = async (req, res) => {
+  const { id } = req.params;
+
+  if (!req.session.tokens)
+    return res.status(401).json({ error: "Not authenticated" });
+
+  const oauth2Client = createOAuthClient();
+  oauth2Client.setCredentials(req.session.tokens);
+  const drive = google.drive({ version: "v3", auth: oauth2Client });
+
+  try {
+    // Attempt Drive deletion first
+    await drive.files.delete({ fileId: id });
+    console.log(`✅ Deleted from Drive: ${id}`);
+  } catch (err) {
+    console.warn(`⚠️ Drive deletion failed for ${id}: ${err.message}`);
+  }
+
+  // Attempt local deletion as fallback
+  try {
+    const localFilePath = path.join(MERGED_DIR, `${id}.mp3`);
+    if (fs.existsSync(localFilePath)) {
+      fs.unlinkSync(localFilePath);
+      console.log(`🗑️ Deleted local copy: ${localFilePath}`);
+    }
+  } catch (err) {
+    console.error(`⚠️ Failed to delete local file: ${err.message}`);
+  }
+
+  res.json({
+    success: true,
+    message: `File ${id} deleted from Drive (and local copy if existed)`
+  });
 };
