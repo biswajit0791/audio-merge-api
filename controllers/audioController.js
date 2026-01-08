@@ -177,9 +177,9 @@ exports.mergeDriveFiles = async (req, res) => {
     if (downloadedFiles.length === 0)
       return res.status(400).json({ error: "Failed to download any files" });
 
-    // Merge the downloaded files
-    const jobId = await enqueueMergeJob(downloadedFiles, name);
-    res.json({ jobId, message: "Merge queued successfully" });
+    // Merge the downloaded files - pass flag to auto-upload to Drive
+    const jobId = await enqueueMergeJob(downloadedFiles, name, true, req.session.tokens);
+    res.json({ jobId, message: "Merge queued successfully. Will auto-upload to Drive when complete." });
   } catch (err) {
     console.error("❌ Failed to merge Drive files:", err.message);
     res.status(500).json({ error: err.message });

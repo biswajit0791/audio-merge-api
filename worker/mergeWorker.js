@@ -33,7 +33,7 @@ const mergedDir = path.join(__dirname, "../merged");
 const mergeWorker = new Worker(
   "merge-audio",
   async (job) => {
-    const { files, name } = job.data;
+    const { files, name, autoUploadToDrive, tokens } = job.data;
     const jobId = job.id || uuidv4();
     console.log(`🎬 Starting merge for job ${jobId}: ${name}`);
 
@@ -57,7 +57,7 @@ const mergeWorker = new Worker(
     const cmd = `ffmpeg -y -f concat -safe 0 -i "${listFile}" -c copy "${outputPath}"`;
 
     return new Promise((resolve, reject) => {
-      const process = exec(cmd, (error, stdout, stderr) => {
+      const process = exec(cmd, async (error, stdout, stderr) => {
         if (error) {
           console.error(`❌ Job ${jobId} failed: ${stderr}`);
           job.log(stderr);
@@ -65,6 +65,33 @@ const mergeWorker = new Worker(
         }
 
         console.log(`✅ Job ${jobId} completed: ${outputName}`);
+
+        // Auto-upload to Drive if requested
+        if (autoUploadToDrive && tokens) {
+          try {
+            const { google } = require("googleapis");
+            const { createOAuthClient } = require("../utils/googleClient");
+            const { ensureFolderExists } = require("../utils/ensureFolderExists");
+
+            const oauth2Client = createOAuthClient();
+            oauth2Client.setCredentials(tokens);
+            const drive = google.drive({ version: "v3", auth: oauth2Client });
+
+            const folderId = await ensureFolderExists(drive, "programs");
+
+            await drive.files.create({
+              resource: { name: outputName, parents: [folderId] },
+              media: { mimeType: "audio/mpeg", body: fs.createReadStream(outputPath) },
+              fields: "id,name,webViewLink"
+            });
+
+            console.log(`✅ Uploaded merged file to Drive: ${outputName}`);
+          } catch (uploadErr) {
+            console.error(`⚠️ Failed to auto-upload to Drive: ${uploadErr.message}`);
+            // Don't fail the job if upload fails
+          }
+        }
+
         job.updateProgress(100);
         resolve({ output: outputPath, name: outputName });
       });
@@ -151,13 +178,13 @@ metaWorker.on("failed", (job, err) => {
 });
 
 // 🔁 Enqueue merge job
-const enqueueMergeJob = async (files, name) => {
+const enqueueMergeJob = async (files, name, autoUploadToDrive = false, tokens = null) => {
   const job = await mergeQueue.add(
     "merge-task",
-    { files, name },
+    { files, name, autoUploadToDrive, tokens },
     { attempts: 2, backoff: { type: "exponential", delay: 2000 } }
   );
-  console.log(`📦 Enqueued merge job ${job.id} for ${name}`);
+  console.log(`📦 Enqueued merge job ${job.id} for ${name}${autoUploadToDrive ? " (auto-upload to Drive)" : ""}`);
   return job.id;
 };
 
