@@ -3,8 +3,8 @@ const { createOAuthClient } = require("../utils/googleClient");
 exports.getAuthUrl = (req, res) => {
   const oauth2Client = createOAuthClient();
   const scopes = [
-    "https://www.googleapis.com/auth/drive.file",
-    "https://www.googleapis.com/auth/drive.metadata.readonly"
+    "https://www.googleapis.com/auth/drive.readonly", // Read-only access to all files
+    "https://www.googleapis.com/auth/drive.file" // Write access for files created by app
   ];
   const url = oauth2Client.generateAuthUrl({
     access_type: "offline",
